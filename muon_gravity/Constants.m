@@ -7,6 +7,7 @@ classdef Constants
         rock_density = 1.5625E3;
         rock_densityB = 1600
 
+        xyz_index = {'Easting', 'Northing', 'Elevation'};
         tunnel_angle_offset_from_north = (4 + 31 / 60 + 27 / 3600) * pi / 180;
         tunnel_slope = 0.01;
     end
