@@ -15,13 +15,22 @@ end
 % Interpolate linearly since we're downsampling
 ElevI = interp2(X, Y, Elev, XI, YI, 'linear');
 
+%Constants
+rock_density=1662;
+delta_rock_density=-500;
+%delta rock density is used in the upper parts of the model
+LayerElev=2163;
+
 dx = XI(1,2) - XI(1,1);
 dy = YI(2,1) - YI(1,1);
 assert(dx > 0 & dy > 0)
 
 min_z = min(ElevI(:));
+max_z = max(ElevI(:));
 
-rho = repmat(Constants.rock_density, n*n, 1);
+rho = repmat (rock_density, n*n,1);
+
+rhoL = repmat(-delta_rock_density, n*n, 1);
 
 % eval_pts = [Constants.base_station, Constants.tunnel_pts];
 
@@ -33,9 +42,12 @@ eval_pts = point_table{measured_points, xyz_index}';
 voxel_corners = [XI(:)'; YI(:)'; repmat(min_z, 1, n*n)];
 
 voxel_diag = [repmat(dx, 1, n*n); repmat(dy, 1, n*n); ElevI(:)' - min_z];
+%voxel_diag_high = [repmat(dx, 1, n*n); repmat(dy, 1, n*n); ElevI(:)' - LayerElev];
+voxel_diag_low= [repmat(dx, 1, n*n); repmat(dy, 1, n*n); repmat(LayerElev- min_z, 1 , n*n) ];
 
 tic;
-interaction_matrix = create_interaction_matrix(eval_pts, voxel_corners, voxel_diag);
+interaction_matrixL = create_interaction_matrix(eval_pts, voxel_corners, voxel_diag_low);
+interaction_matrix = create_interaction_matrix(eval_pts, voxel_corners, voxel_diag); 
 toc;
 
 lc = point_table{'W wall tunnel', xyz_index}';
@@ -50,9 +62,11 @@ for pt = eval_pts
     ind = ind + 1;
 end
 
-rho_oriented = repmat(-Constants.rock_density, numel(tunnel_rooms), 1);
+rho_oriented = repmat(-rock_density, numel(tunnel_rooms), 1);
 
-gz_vals = interaction_matrix * rho + tunnel_effect * rho_oriented;
+gz_vals = interaction_matrixL * rhoL + interaction_matrix * rho + tunnel_effect * rho_oriented;
+%gz_vals = interaction_matrix * rho + tunnel_effect * rho_oriented;
+
 % inverse = interaction_matrix \ gz_vals;
 % diff = sum(abs(inverse - rho)./rho) / numel(rho)
 
@@ -81,7 +95,7 @@ below_cutoff_height = elevations < 2150;
         scatter(N(mask), gz_calc(mask))
         errorbar(N(mask), gz_meas(mask), error(mask), 'o');
         
-        title([fig_name ' n = ' num2str(n) ', density = ' num2str(Constants.rock_density)]);
+        title([fig_name ' n = ' num2str(n) ', bottom density = ' num2str(rock_density) ', delta density = ' num2str(delta_rock_density) ', layer elevation = ' num2str(LayerElev)]);
         legend('Calculated', 'Observed');
         xlabel('Northing (m)'); ylabel('gz (mgal)');
         % saveas(gcf, ['figures/' fig_name ' stations_' num2str(n) '_' num2str(int64(Constants.rock_density))], 'png');
