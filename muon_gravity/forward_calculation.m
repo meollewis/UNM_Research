@@ -11,15 +11,21 @@ end
 % Generate submesh on which to downsample
 [XI, YI] = meshgrid(linspace(min(X(:)), max(X(:)), n), ...
                     linspace(min(Y(:)), max(Y(:)), n));
+                
+ %Xn = linspace(min(X(:)), max(X(:)), n)
+ %Yn = linspace(min(Y(:)), max(Y(:)), n)
 
 % Interpolate linearly since we're downsampling
 ElevI = interp2(X, Y, Elev, XI, YI, 'linear');
 
 %Constants
-rock_density=1662;
-delta_rock_density=-500;
-%delta rock density is used in the upper parts of the model
-LayerElev=2163;
+rock_density=1900;
+delta_rock_density=500;
+%delta rock density is used in the lower parts of the model
+LayerElev=2120;
+%lowest point of the top bottom interface
+LayerSlope=.02;
+%Elevation/northing
 
 dx = XI(1,2) - XI(1,1);
 dy = YI(2,1) - YI(1,1);
@@ -30,19 +36,41 @@ max_z = max(ElevI(:));
 
 rho = repmat (rock_density, n*n,1);
 
-rhoL = repmat(-delta_rock_density, n*n, 1);
+rhoL = repmat(delta_rock_density, n*n, 1);
 
 % eval_pts = [Constants.base_station, Constants.tunnel_pts];
 
 [point_table, measured_points] = build_table();
 
 eval_pts = point_table{measured_points, Constants.xyz_index}';
+elevations = eval_pts(3, :);
+northing = eval_pts(2, :);
+easting = eval_pts(1,:);
 
 voxel_corners = [XI(:)'; YI(:)'; repmat(min_z, 1, n*n)];
 
+Layer=(YI-min(min(YI))).*LayerSlope + LayerElev;
+%comparelayer = [Layer; ElevI];
+
+comparelayer = [Layer(:)'; ElevI(:)'];
+minElev=ones(1,n*n);
+minElev = min(comparelayer);
+
+eastingcut=50
+%number 1 through n determines how far east the cut displayed in the
+%next figure is
+clf
+figure(1)
+plot(YI(:,eastingcut),Layer(:,eastingcut))
+hold on
+plot (YI(:,eastingcut),min_z*(ones(n,1)))
+plot (YI(:,eastingcut), ElevI(:,eastingcut))
+plot (YI(:,1),minElev((eastingcut*n)-(n-1):eastingcut*n)','o')
+plot(northing, elevations,'o')
+
 voxel_diag = [repmat(dx, 1, n*n); repmat(dy, 1, n*n); ElevI(:)' - min_z];
 %voxel_diag_high = [repmat(dx, 1, n*n); repmat(dy, 1, n*n); ElevI(:)' - LayerElev];
-voxel_diag_low= [repmat(dx, 1, n*n); repmat(dy, 1, n*n); repmat(LayerElev- min_z, 1 , n*n) ];
+voxel_diag_low= [repmat(dx, 1, n*n); repmat(dy, 1, n*n); minElev - min_z ];
 
 tic;
 interaction_matrixL = create_interaction_matrix(eval_pts, voxel_corners, voxel_diag_low);
@@ -61,7 +89,7 @@ for pt = eval_pts
     ind = ind + 1;
 end
 
-rho_oriented = repmat(-rock_density, numel(tunnel_rooms), 1);
+rho_oriented = repmat(rock_density+delta_rock_density, numel(tunnel_rooms), 1);
 
 gz_vals = interaction_matrixL * rhoL + interaction_matrix * rho + tunnel_effect * rho_oriented;
 %gz_vals = interaction_matrix * rho + tunnel_effect * rho_oriented;
@@ -78,8 +106,9 @@ end
 % Increase the fineness of the default color map
 set(0, 'DefaultFigureColormap', parula(1024*16));
 
-elevations = eval_pts(3, :);
-northing = eval_pts(2, :);
+%elevations = eval_pts(3, :);
+%northing = eval_pts(2, :);
+%easting = eval_pts(1,:);
 
 measured_values = point_table{measured_points, 'Measurements'};
 measure_errors = point_table{measured_points, 'Errors'};
@@ -102,6 +131,10 @@ below_cutoff_height = elevations < 2150;
 
 do_plot(10, 'Lower',  below_cutoff_height, northing, offset_gz_vals, gz_avg_at_stations, gz_error_at_stations);
 do_plot(11, 'Upper', ~below_cutoff_height, northing, offset_gz_vals, gz_avg_at_stations, gz_error_at_stations);
+dataarray=[easting',northing',elevations',offset_gz_vals,gz_avg_at_stations,gz_error_at_stations];
+filename=['AllData_', num2str(n),'_',num2str(rock_density),'_',num2str(delta_rock_density),'_',num2str(LayerElev),'.dat'];
+save(filename, 'dataarray', '-ascii', '-double');
+
 
 %%
 figure(2); hold on;
